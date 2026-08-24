@@ -34,13 +34,13 @@
 
 ## 🚀 Live Demo
 
-> ⚠️ **Before submitting:** replace these with your real Railway/Vercel URLs after deploying (see [Deployment](#-deployment) below).
-
 | Service | URL |
 |---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:4000 |
-| API Health | http://localhost:4000/health |
+| Frontend | https://lastmile-tracker-anshuman.vercel.app |
+| Backend API | https://last-mile-delivery-tracker-production-dbd9.up.railway.app |
+| API Health | https://last-mile-delivery-tracker-production-dbd9.up.railway.app/health |
+
+Frontend on Vercel's edge network, backend on Railway (no sleep/cold-start on the hobby tier) — both stay warm, no delay on first load.
 
 **Demo credentials** (password for all: `Test@1234`):
 
