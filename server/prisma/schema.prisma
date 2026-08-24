@@ -1,0 +1,257 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────
+
+enum Role {
+  CUSTOMER
+  AGENT
+  ADMIN
+}
+
+enum OrderType {
+  B2B
+  B2C
+}
+
+enum PaymentType {
+  PREPAID
+  COD
+}
+
+enum OrderStatus {
+  PENDING
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         Role     @default(CUSTOMER)
+  phone        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  refreshTokens        RefreshToken[]
+  ordersAsCustomer     Order[]              @relation("CustomerOrders")
+  ordersCreatedByAdmin Order[]              @relation("AdminCreatedOrders")
+  ordersAsAgent        Order[]              @relation("AgentOrders")
+  trackingEventsActed  OrderTrackingEvent[]
+  rescheduleRequests   DeliveryReschedule[]
+  agentAvailability    AgentAvailability?
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────
+// REFRESH TOKENS (server-side token storage for revocation)
+// ─────────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique @map("token_hash") // SHA-256 hash of the actual token
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ZONES
+// ─────────────────────────────────────────────────────────────
+
+model Zone {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  latitude    Float    // Zone centroid latitude (used for map display)
+  longitude   Float    // Zone centroid longitude (used for map display)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  areas              ZoneArea[]
+  rateCardsFrom      RateCard[]          @relation("FromZone")
+  rateCardsTo        RateCard[]          @relation("ToZone")
+  ordersPickup       Order[]             @relation("PickupZone")
+  ordersDrop         Order[]             @relation("DropZone")
+  agentsInZone       AgentAvailability[]
+
+  @@map("zones")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ZONE AREAS (many localities/pincodes per zone)
+// ─────────────────────────────────────────────────────────────
+
+model ZoneArea {
+  id       String @id @default(cuid())
+  zoneId   String @map("zone_id")
+  areaName String @map("area_name") // e.g. "Bandra", "400050"
+
+  zone Zone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  @@index([areaName]) // Fast lookup for zone detection
+  @@map("zone_areas")
+}
+
+// ─────────────────────────────────────────────────────────────
+// RATE CARDS
+// ─────────────────────────────────────────────────────────────
+
+model RateCard {
+  id                  String    @id @default(cuid())
+  name                String
+  orderType           OrderType @map("order_type")
+  fromZoneId          String    @map("from_zone_id")
+  toZoneId            String    @map("to_zone_id")
+  isIntraZone         Boolean   @map("is_intra_zone")
+  baseRatePerKg       Decimal   @map("base_rate_per_kg") @db.Decimal(10, 2)
+  codSurchargePercent Decimal   @map("cod_surcharge_percent") @db.Decimal(5, 2)
+  effectiveFrom       DateTime  @map("effective_from") @db.Date
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  fromZone Zone @relation("FromZone", fields: [fromZoneId], references: [id])
+  toZone   Zone @relation("ToZone", fields: [toZoneId], references: [id])
+
+  // Prevent duplicate rate cards for the same zone pair + type + date
+  @@unique([fromZoneId, toZoneId, orderType, isIntraZone, effectiveFrom], name: "unique_rate_card")
+  @@index([fromZoneId, toZoneId, orderType])
+  @@map("rate_cards")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ORDERS
+// ─────────────────────────────────────────────────────────────
+
+model Order {
+  id                   String      @id @default(cuid())
+  trackingNumber       String      @unique @map("tracking_number")
+  customerId           String      @map("customer_id")
+  createdByAdminId     String?     @map("created_by_admin_id")
+  pickupAddress        String      @map("pickup_address")
+  dropAddress          String      @map("drop_address")
+  pickupZoneId         String      @map("pickup_zone_id")
+  dropZoneId           String      @map("drop_zone_id")
+  lengthCm             Float       @map("length_cm")
+  breadthCm            Float       @map("breadth_cm")
+  heightCm             Float       @map("height_cm")
+  actualWeightKg       Decimal     @map("actual_weight_kg") @db.Decimal(10, 3)
+  volumetricWeightKg   Decimal     @map("volumetric_weight_kg") @db.Decimal(10, 3)
+  billableWeightKg     Decimal     @map("billable_weight_kg") @db.Decimal(10, 3)
+  orderType            OrderType   @map("order_type")
+  paymentType          PaymentType @map("payment_type")
+  rateCardId           String?     @map("rate_card_id")
+  baseRatePerKg        Decimal     @map("base_rate_per_kg") @db.Decimal(10, 2)
+  charge               Decimal     @db.Decimal(10, 2)
+  codSurcharge         Decimal     @map("cod_surcharge") @db.Decimal(10, 2)
+  totalCharge          Decimal     @map("total_charge") @db.Decimal(10, 2)
+  status               OrderStatus @default(PENDING)
+  assignedAgentId      String?     @map("assigned_agent_id")
+  scheduledDeliveryDate DateTime?  @map("scheduled_delivery_date") @db.Date
+  createdAt            DateTime    @default(now()) @map("created_at")
+  updatedAt            DateTime    @updatedAt @map("updated_at")
+
+  customer       User   @relation("CustomerOrders", fields: [customerId], references: [id])
+  createdByAdmin User?  @relation("AdminCreatedOrders", fields: [createdByAdminId], references: [id])
+  assignedAgent  User?  @relation("AgentOrders", fields: [assignedAgentId], references: [id])
+  pickupZone     Zone   @relation("PickupZone", fields: [pickupZoneId], references: [id])
+  dropZone       Zone   @relation("DropZone", fields: [dropZoneId], references: [id])
+
+  trackingEvents     OrderTrackingEvent[]
+  reschedules        DeliveryReschedule[]
+
+  @@index([trackingNumber])
+  @@index([customerId])
+  @@index([assignedAgentId])
+  @@index([pickupZoneId])
+  @@index([dropZoneId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// ─────────────────────────────────────────────────────────────
+// ORDER TRACKING EVENTS (IMMUTABLE — append only, never update/delete)
+// ─────────────────────────────────────────────────────────────
+
+model OrderTrackingEvent {
+  id        String      @id @default(cuid())
+  orderId   String      @map("order_id")
+  status    OrderStatus
+  actorId   String?     @map("actor_id")
+  actorRole String?     @map("actor_role") // Role enum as string for flexibility
+  note      String?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("order_tracking_events")
+}
+
+// ─────────────────────────────────────────────────────────────
+// DELIVERY RESCHEDULES
+// ─────────────────────────────────────────────────────────────
+
+model DeliveryReschedule {
+  id           String   @id @default(cuid())
+  orderId      String   @map("order_id")
+  originalDate DateTime @map("original_date") @db.Date
+  newDate      DateTime @map("new_date") @db.Date
+  reason       String
+  requestedBy  String   @map("requested_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  requester User  @relation(fields: [requestedBy], references: [id])
+
+  @@index([orderId])
+  @@map("delivery_reschedules")
+}
+
+// ─────────────────────────────────────────────────────────────
+// AGENT AVAILABILITY
+// ─────────────────────────────────────────────────────────────
+
+model AgentAvailability {
+  id            String   @id @default(cuid())
+  agentId       String   @unique @map("agent_id") // One row per agent
+  currentZoneId String   @map("current_zone_id")
+  isAvailable   Boolean  @default(true) @map("is_available")
+  lastUpdated   DateTime @default(now()) @map("last_updated")
+
+  agent       User @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  currentZone Zone @relation(fields: [currentZoneId], references: [id])
+
+  @@index([currentZoneId, isAvailable])
+  @@map("agent_availability")
+}

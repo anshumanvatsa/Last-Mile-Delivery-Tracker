@@ -1,0 +1,54 @@
+# ============================================================
+# Root .gitignore — covers both /server and /client
+# ============================================================
+
+# dependencies
+node_modules/
+**/node_modules/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# environment secrets (NEVER commit real .env files)
+.env
+.env.local
+.env*.local
+!.env.example
+
+# server build output
+server/dist/
+dist/
+
+# next.js build output
+client/.next/
+client/out/
+.next/
+out/
+
+# production
+/build
+
+# testing / coverage
+/coverage
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# editor
+.vscode/
+.idea/
