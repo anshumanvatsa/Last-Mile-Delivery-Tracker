@@ -5,8 +5,30 @@
 [![Backend: Express + TypeScript](https://img.shields.io/badge/Backend-Express%20%2B%20TypeScript-blue)](server/)
 [![Frontend: Next.js 14](https://img.shields.io/badge/Frontend-Next.js%2014-black)](client/)
 [![DB: PostgreSQL + Prisma](https://img.shields.io/badge/DB-PostgreSQL%20%2B%20Prisma-336791)](server/prisma/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)](#)
 
-📄 **System design write-up (submission deliverable):** [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) · 🔬 **Extended technical reference:** [`ENGINEERING_DEEP_DIVE.md`](./ENGINEERING_DEEP_DIVE.md)
+**Submission for:** Unthinkable Solutions — Last-Mile Delivery Tracker Challenge
+**Author:** Anshuman (23BCE1717) · atulvatsamishra@gmail.com
+
+📄 **System design write-up (required deliverable, ≤800 words):** [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) · [`SYSTEM_DESIGN.pdf`](./SYSTEM_DESIGN.pdf)
+🔬 **Extended technical reference:** [`ENGINEERING_DEEP_DIVE.md`](./ENGINEERING_DEEP_DIVE.md)
+
+---
+
+## 📑 Contents
+
+- [Live Demo](#-live-demo)
+- [Deliverables Checklist](#-deliverables-checklist)
+- [Features](#-features)
+- [Tech Stack](#-tech-stack)
+- [Quick Start](#-quick-start)
+- [Environment Variables](#️-environment-variables)
+- [API Reference](#-api-reference)
+- [Rate Engine Verification](#-rate-engine-verification)
+- [Database Schema](#-database-schema)
+- [Project Structure](#-project-structure)
+- [Deployment](#-deployment)
+- [Security Decisions](#-security-decisions)
 
 ---
 
@@ -27,6 +49,26 @@
 | Admin | admin@lastmile.com |
 | Agent | agent1@lastmile.com |
 | Customer | customer1@lastmile.com |
+
+---
+
+## ✅ Deliverables Checklist
+
+| # | Deliverable | Where |
+|---|-------------|-------|
+| 1 | Complete source code | this repo — [`/server`](server/) (API) + [`/client`](client/) (frontend) |
+| 2 | README with setup guide, `.env.example`, API docs, DB schema, rate calc logic | this file |
+| 3 | Hosted application URL | [Live Demo](#-live-demo) above, once deployed — see [Deployment](#-deployment) |
+| 4 | System design write-up (≤800 words) | [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) / [`SYSTEM_DESIGN.pdf`](./SYSTEM_DESIGN.pdf) |
+
+| Evaluation Focus | Implementation |
+|---|---|
+| Rate calculation engine correctness (zone, volumetric weight, B2B/B2C, COD) | [`server/src/services/rateEngine.ts`](server/src/services/rateEngine.ts) — DB-driven, zero hardcoded rates. Worked example verified in [Rate Engine Verification](#-rate-engine-verification). |
+| Auto-assignment logic & agent availability modelling | [`server/src/services/autoAssign.ts`](server/src/services/autoAssign.ts) — zone-first match → system-wide fallback → explicit failure; auto-release on delivery/failure. |
+| Order status lifecycle & immutable tracking history | [`server/src/services/orderLifecycle.ts`](server/src/services/orderLifecycle.ts) — enforced status machine, append-only `order_tracking_events`. |
+| Database schema & data modelling | [`server/prisma/schema.prisma`](server/prisma/schema.prisma) — 9 tables, see [Database Schema](#-database-schema). |
+| API design & code structure | [`server/src/routes/`](server/src/routes/) — consistent `{ success, data }` / `{ success, error, code }` envelope, see [API Reference](#-api-reference). |
+| Documentation | This README + [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) + [`ENGINEERING_DEEP_DIVE.md`](./ENGINEERING_DEEP_DIVE.md). |
 
 ---
 
@@ -96,8 +138,8 @@
 ### 1. Clone & Setup
 
 ```bash
-git clone <repo>
-cd lastMile
+git clone https://github.com/anshumanvatsa/Last-Mile-Delivery-Tracker.git
+cd Last-Mile-Delivery-Tracker
 ```
 
 ### 2. Start Database
@@ -129,6 +171,32 @@ npm run dev
 ```
 
 Frontend will start at **http://localhost:3000**
+
+---
+
+## ⚙️ Environment Variables
+
+Full inline documentation lives in [`server/.env.example`](server/.env.example) and [`client/.env.example`](client/.env.example) — summary:
+
+**`server/.env`**
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (Docker locally, Railway-injected in production) |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Signing secrets for access/refresh tokens — generate with `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
+| `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | Token lifetimes — default `15m` / `7d` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` | Outbound email (Resend or Gmail SMTP) — status-change and reschedule notifications. If unset, email sending is skipped gracefully; the API never fails because of it. |
+| `PORT` | Backend listen port — default `4000` |
+| `NODE_ENV` | `development` \| `production` |
+| `FRONTEND_URL` | Used to build tracking/reschedule links inside emails |
+| `CORS_ORIGIN` | Comma-separated list of origins allowed to call the API |
+
+**`client/.env.local`**
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Backend base URL the frontend calls |
+| `NEXT_PUBLIC_APP_URL` | This app's own public URL (used in meta tags) |
 
 ---
 
