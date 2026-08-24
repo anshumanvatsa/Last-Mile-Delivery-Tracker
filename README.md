@@ -2,6 +2,7 @@
 
 > Production-grade last-mile delivery tracking platform built with Node.js, PostgreSQL, and Next.js 14.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-lastmile--tracker--anshuman.vercel.app-success)](https://lastmile-tracker-anshuman.vercel.app)
 [![Backend: Express + TypeScript](https://img.shields.io/badge/Backend-Express%20%2B%20TypeScript-blue)](server/)
 [![Frontend: Next.js 14](https://img.shields.io/badge/Frontend-Next.js%2014-black)](client/)
 [![DB: PostgreSQL + Prisma](https://img.shields.io/badge/DB-PostgreSQL%20%2B%20Prisma-336791)](server/prisma/)
@@ -10,6 +11,7 @@
 **Submission for:** Unthinkable Solutions — Last-Mile Delivery Tracker Challenge
 **Author:** Anshuman (23BCE1717) · atulvatsamishra@gmail.com
 
+🔗 **Live app:** [lastmile-tracker-anshuman.vercel.app](https://lastmile-tracker-anshuman.vercel.app) · **Live API:** [last-mile-delivery-tracker-production-dbd9.up.railway.app](https://last-mile-delivery-tracker-production-dbd9.up.railway.app/health)
 📄 **System design write-up (required deliverable, ≤800 words):** [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) · [`SYSTEM_DESIGN.pdf`](./SYSTEM_DESIGN.pdf)
 🔬 **Extended technical reference:** [`ENGINEERING_DEEP_DIVE.md`](./ENGINEERING_DEEP_DIVE.md)
 
@@ -58,7 +60,7 @@ Frontend on Vercel's edge network, backend on Railway (no sleep/cold-start on th
 |---|-------------|-------|
 | 1 | Complete source code | this repo — [`/server`](server/) (API) + [`/client`](client/) (frontend) |
 | 2 | README with setup guide, `.env.example`, API docs, DB schema, rate calc logic | this file |
-| 3 | Hosted application URL | [Live Demo](#-live-demo) above, once deployed — see [Deployment](#-deployment) |
+| 3 | Hosted application URL | **Live**, see [Live Demo](#-live-demo) above |
 | 4 | System design write-up (≤800 words) | [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) / [`SYSTEM_DESIGN.pdf`](./SYSTEM_DESIGN.pdf) |
 
 | Evaluation Focus | Implementation |
