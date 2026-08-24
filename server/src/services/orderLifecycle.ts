@@ -1,4 +1,4 @@
-import { OrderStatus, Role } from '@prisma/client';
+import { OrderStatus, Role, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { sendStatusEmail } from './emailService';
@@ -61,7 +61,7 @@ export async function updateOrderStatus(params: UpdateStatusParams): Promise<voi
   const isTerminal = newStatus === OrderStatus.DELIVERED || newStatus === OrderStatus.FAILED;
 
   // Build transaction operations
-  const ops: Parameters<typeof prisma.$transaction>[0] = [
+  const ops: Prisma.PrismaPromise<unknown>[] = [
     // 1. Update order status
     prisma.order.update({
       where: { id: orderId },
@@ -88,11 +88,11 @@ export async function updateOrderStatus(params: UpdateStatusParams): Promise<voi
       prisma.agentAvailability.updateMany({
         where: { agentId: order.assignedAgentId },
         data: { isAvailable: true, lastUpdated: new Date() },
-      }) as any
+      })
     );
   }
 
-  await prisma.$transaction(ops as any);
+  await prisma.$transaction(ops);
 
   // 4. Send email notification (async, non-blocking — failures are logged not thrown)
   if (order.customer.email) {
