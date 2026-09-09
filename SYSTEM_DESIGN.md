@@ -1,14 +1,6 @@
-# System Design Write-Up — LastMile Delivery Tracker
+# System Design — LastMile Delivery Tracker
 
-**Name:** Anshuman
-**Registration Number:** 23BCE1717
-**Email:** atulvatsamishra@gmail.com
-
-**Submission for:** Unthinkable Solutions — Last-Mile Delivery Tracker Challenge
-
----
-
-This document covers the rate engine, zone detection, auto-assignment, and failed-delivery handling. A deeper technical reference is available in `ENGINEERING_DEEP_DIVE.md`.
+> This document covers the four core design decisions that power the platform: the rate engine, zone detection, agent auto-assignment, and failed-delivery handling.
 
 ## 1. Rate Calculation Engine
 

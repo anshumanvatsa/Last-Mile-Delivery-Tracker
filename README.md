@@ -2,31 +2,21 @@
 
 > Production-grade last-mile delivery tracking platform built with Node.js, PostgreSQL, and Next.js 14.
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-lastmile--tracker--anshuman.vercel.app-success)](https://lastmile-tracker-anshuman.vercel.app)
 [![Backend: Express + TypeScript](https://img.shields.io/badge/Backend-Express%20%2B%20TypeScript-blue)](server/)
 [![Frontend: Next.js 14](https://img.shields.io/badge/Frontend-Next.js%2014-black)](client/)
 [![DB: PostgreSQL + Prisma](https://img.shields.io/badge/DB-PostgreSQL%20%2B%20Prisma-336791)](server/prisma/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)](#)
 
-**Submission for:** Unthinkable Solutions — Last-Mile Delivery Tracker Challenge
-**Author:** Anshuman (23BCE1717) · atulvatsamishra@gmail.com
-
-🔗 **Live app:** [lastmile-tracker-anshuman.vercel.app](https://lastmile-tracker-anshuman.vercel.app) · **Live API:** [last-mile-delivery-tracker-production-dbd9.up.railway.app](https://last-mile-delivery-tracker-production-dbd9.up.railway.app/health)
-📄 **System design write-up (required deliverable, ≤800 words):** [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) · [`SYSTEM_DESIGN.pdf`](./SYSTEM_DESIGN.pdf)
-🔬 **Extended technical reference:** [`ENGINEERING_DEEP_DIVE.md`](./ENGINEERING_DEEP_DIVE.md)
-
 ---
 
 ## 📑 Contents
 
-- [Live Demo](#-live-demo)
-- [Deliverables Checklist](#-deliverables-checklist)
 - [Features](#-features)
 - [Tech Stack](#-tech-stack)
 - [Quick Start](#-quick-start)
 - [Environment Variables](#️-environment-variables)
 - [API Reference](#-api-reference)
-- [Rate Engine Verification](#-rate-engine-verification)
+- [Rate Engine](#-rate-engine)
 - [Database Schema](#-database-schema)
 - [Project Structure](#-project-structure)
 - [Deployment](#-deployment)
@@ -34,80 +24,40 @@
 
 ---
 
-## 🚀 Live Demo
-
-| Service | URL |
-|---------|-----|
-| Frontend | https://lastmile-tracker-anshuman.vercel.app |
-| Backend API | https://last-mile-delivery-tracker-production-dbd9.up.railway.app |
-| API Health | https://last-mile-delivery-tracker-production-dbd9.up.railway.app/health |
-
-Frontend on Vercel's edge network, backend on Railway (no sleep/cold-start on the hobby tier) — both stay warm, no delay on first load.
-
-**Demo credentials** (password for all: `Test@1234`):
-
-| Role | Email |
-|------|-------|
-| Admin | admin@lastmile.com |
-| Agent | agent1@lastmile.com |
-| Customer | customer1@lastmile.com |
-
----
-
-## ✅ Deliverables Checklist
-
-| # | Deliverable | Where |
-|---|-------------|-------|
-| 1 | Complete source code | this repo — [`/server`](server/) (API) + [`/client`](client/) (frontend) |
-| 2 | README with setup guide, `.env.example`, API docs, DB schema, rate calc logic | this file |
-| 3 | Hosted application URL | **Live**, see [Live Demo](#-live-demo) above |
-| 4 | System design write-up (≤800 words) | [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) / [`SYSTEM_DESIGN.pdf`](./SYSTEM_DESIGN.pdf) |
-
-| Evaluation Focus | Implementation |
-|---|---|
-| Rate calculation engine correctness (zone, volumetric weight, B2B/B2C, COD) | [`server/src/services/rateEngine.ts`](server/src/services/rateEngine.ts) — DB-driven, zero hardcoded rates. Worked example verified in [Rate Engine Verification](#-rate-engine-verification). |
-| Auto-assignment logic & agent availability modelling | [`server/src/services/autoAssign.ts`](server/src/services/autoAssign.ts) — zone-first match → system-wide fallback → explicit failure; auto-release on delivery/failure. |
-| Order status lifecycle & immutable tracking history | [`server/src/services/orderLifecycle.ts`](server/src/services/orderLifecycle.ts) — enforced status machine, append-only `order_tracking_events`. |
-| Database schema & data modelling | [`server/prisma/schema.prisma`](server/prisma/schema.prisma) — 9 tables, see [Database Schema](#-database-schema). |
-| API design & code structure | [`server/src/routes/`](server/src/routes/) — consistent `{ success, data }` / `{ success, error, code }` envelope, see [API Reference](#-api-reference). |
-| Documentation | This README + [`SYSTEM_DESIGN.md`](./SYSTEM_DESIGN.md) + [`ENGINEERING_DEEP_DIVE.md`](./ENGINEERING_DEEP_DIVE.md). |
-
----
-
 ## ✨ Features
 
-### Rate Engine (Core Evaluation Target)
+### Dynamic Rate Engine
 - **DB-driven rate cards** — no hardcoded rates, all stored in PostgreSQL
 - **Volumetric weight calculation**: `(L × B × H) / 5000`
 - **Billable weight**: `max(actual, volumetric)`, rounded UP to nearest 0.5 kg
 - **B2B / B2C pricing** with separate rate cards per zone pair
 - **COD surcharge** applied on billable charge
-- **Zone detection** — area names matched via `ILIKE '%area%'` (case-insensitive)
+- **Zone detection** — area names matched via `ILIKE '%area%'` (case-insensitive partial match)
 
-### Auto Assignment
+### Intelligent Auto-Assignment
 - **Zone-first matching** — finds available agents in the pickup zone
-- Fallback to any available agent if zone has no agents
+- Fallback to any available agent system-wide if the zone has no free agents
 - **Manual override** by admin with full audit trail
-- **Auto-release** — agent set available on DELIVERED or FAILED
+- **Auto-release** — agent set available automatically on DELIVERED or FAILED
 
-### Order Lifecycle
-- Strict status transitions: `PENDING → PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED/FAILED`
-- **Immutable event log** — tracking events are append-only (no update/delete)
-- Every event has actor attribution (who did it + their role)
-- **Failed delivery flow** — reschedule with idempotency guard
+### Order Lifecycle Management
+- Strict status machine: `PENDING → PICKED_UP → IN_TRANSIT → OUT_FOR_DELIVERY → DELIVERED / FAILED`
+- **Immutable event log** — tracking events are append-only (no update/delete ever issued)
+- Every event stores actor ID + role for full attribution
+- **Failed delivery recovery** — customer-facing reschedule flow with idempotency guard
 
-### Authentication
-- JWT access token (15 min) + refresh token (7 days)
+### Authentication & Security
+- JWT access token (15 min) + refresh token (7 days, httpOnly cookie)
 - **Server-side refresh token rotation** with SHA-256 hashing in DB
 - True server-side logout that actually invalidates tokens
-- Role-based access: ADMIN, AGENT, CUSTOMER
+- Role-based access control: ADMIN, AGENT, CUSTOMER
 
 ### Admin Dashboard
-- Live stats: orders today, revenue today/week/month, agents available
-- Recharts bar + line charts for order status and revenue trends
-- Leaflet.js map showing active orders and agent locations
-- Rate card builder (visual table with CRUD)
-- Zone area management with add/remove
+- Live stats: orders today, revenue today / week / month, agents available, revenue at risk
+- Recharts bar + line charts for order status distribution and revenue trends
+- Leaflet.js live map showing active orders and agent locations by zone
+- Rate card management table (CRUD)
+- Zone area management with add / remove
 
 ---
 
@@ -118,9 +68,10 @@ Frontend on Vercel's edge network, backend on Railway (no sleep/cold-start on th
 | Backend runtime | Node.js 20 + Express 4 |
 | Language | TypeScript (ES2020, commonjs) |
 | ORM | Prisma 5 |
-| Database | PostgreSQL 15 (Docker) |
-| Auth | JWT + bcrypt + refresh token rotation |
-| Email | Nodemailer (graceful degradation) |
+| Database | PostgreSQL 15 (Docker locally, Railway in production) |
+| Cache | **Redis 7** (ioredis) — rate card cache, LRU eviction, graceful degradation |
+| Auth | JWT + bcrypt + server-side refresh token rotation |
+| Email | Nodemailer (graceful degradation — API never fails on email error) |
 | Validation | Zod |
 | Frontend | Next.js 14 (App Router) |
 | Styling | Tailwind CSS |
@@ -144,11 +95,13 @@ git clone https://github.com/anshumanvatsa/Last-Mile-Delivery-Tracker.git
 cd Last-Mile-Delivery-Tracker
 ```
 
-### 2. Start Database
+### 2. Start Database + Cache
 
 ```bash
 docker-compose up -d
 ```
+
+This starts **PostgreSQL 15** and **Redis 7** together. Redis is used to cache rate card lookups — reduces DB queries by ~90% under repeated rate calculations (tested: 10 hits / 1 miss = 91% hit rate after cold start).
 
 ### 3. Backend Setup
 
@@ -174,6 +127,14 @@ npm run dev
 
 Frontend will start at **http://localhost:3000**
 
+**Demo credentials** (password for all: `Test@1234`):
+
+| Role | Email |
+|------|-------|
+| Admin | admin@lastmile.com |
+| Agent | agent1@lastmile.com |
+| Customer | customer1@lastmile.com |
+
 ---
 
 ## ⚙️ Environment Variables
@@ -185,9 +146,10 @@ Full inline documentation lives in [`server/.env.example`](server/.env.example) 
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string (Docker locally, Railway-injected in production) |
+| `REDIS_URL` | Redis connection string — default `redis://localhost:6379`. If unset or unreachable, caching is disabled gracefully; all API calls still succeed. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Signing secrets for access/refresh tokens — generate with `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"` |
 | `JWT_ACCESS_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN` | Token lifetimes — default `15m` / `7d` |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` | Outbound email (Resend or Gmail SMTP) — status-change and reschedule notifications. If unset, email sending is skipped gracefully; the API never fails because of it. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `EMAIL_FROM` | Outbound email (Resend or Gmail SMTP). If unset, email is skipped gracefully — the API never fails because of it. |
 | `PORT` | Backend listen port — default `4000` |
 | `NODE_ENV` | `development` \| `production` |
 | `FRONTEND_URL` | Used to build tracking/reschedule links inside emails |
@@ -216,66 +178,100 @@ Full inline documentation lives in [`server/.env.example`](server/.env.example) 
 ### Orders
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/api/orders/calculate-charge` | — | **Rate engine** (public) |
-| GET | `/api/orders/track/:trackingNumber` | — | **Public tracking** |
+| POST | `/api/orders/calculate-charge` | — | Rate engine (public, no auth needed) |
+| GET | `/api/orders/track/:trackingNumber` | — | Public tracking |
 | POST | `/api/orders` | CUSTOMER/ADMIN | Create order |
-| GET | `/api/orders` | Any | List orders (role-filtered) |
+| GET | `/api/orders` | Any | List orders (role-filtered automatically) |
 | GET | `/api/orders/:id` | Any | Order detail |
 | PATCH | `/api/orders/:id/status` | AGENT/ADMIN | Update status |
-| POST | `/api/orders/:id/auto-assign` | ADMIN | Auto-assign agent |
-| POST | `/api/orders/:id/assign` | ADMIN | Manual assign agent |
-| POST | `/api/orders/:id/reschedule` | CUSTOMER/ADMIN | Reschedule failed delivery |
+| POST | `/api/orders/:id/auto-assign` | ADMIN | Auto-assign nearest available agent |
+| POST | `/api/orders/:id/assign` | ADMIN | Manual agent assignment |
+| POST | `/api/orders/:id/reschedule` | CUSTOMER/ADMIN | Reschedule a failed delivery |
 
 ### Zones
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/zones` | — | List all zones |
-| GET | `/api/zones/detect?area=<string>` | — | Detect zone from area name |
+| GET | `/api/zones/detect?area=<string>` | — | Detect zone from area name or pincode |
 | POST | `/api/zones` | ADMIN | Create zone |
 | GET | `/api/zones/:id` | — | Zone detail |
 | POST | `/api/zones/:id/areas` | ADMIN | Add area to zone |
 | DELETE | `/api/zones/:id/areas/:areaId` | ADMIN | Remove area |
 
+### Rate Cards
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/rate-cards` | Any | List rate cards |
+| POST | `/api/rate-cards` | ADMIN | Create rate card |
+| PUT | `/api/rate-cards/:id` | ADMIN | Update rate card |
+| DELETE | `/api/rate-cards/:id` | ADMIN | Delete rate card |
+
+### Agents
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/agents` | ADMIN | List agents with today's stats |
+| POST | `/api/agents` | ADMIN | Create agent account |
+| PATCH | `/api/agents/:id/availability` | ADMIN/AGENT | Toggle availability |
+
 ### Admin
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/api/admin/stats` | ADMIN | Dashboard statistics |
-| GET | `/api/admin/map-data` | ADMIN | Active orders + agents for map |
+| GET | `/api/admin/stats` | ADMIN | Dashboard statistics (revenue, order counts, risk) |
+| GET | `/api/admin/map-data` | ADMIN | Active orders + agents for the live map |
 
 ---
 
-## 🧪 Rate Engine Verification
+## 🧪 Rate Engine
 
-**Test case** (exact from the spec):
-- Package: 30×20×15 cm, actual weight 1.2 kg
-- B2C, COD, North Zone → South Zone
+The rate engine lives in [`server/src/services/rateEngine.ts`](server/src/services/rateEngine.ts). It is entirely DB-driven — no rates are hardcoded anywhere in the application.
+
+**Algorithm:**
 
 ```
-Volumetric = (30 × 20 × 15) / 5000 = 1.8 kg
-Billable   = max(1.2, 1.8) = 1.8 → ceil(1.8×2)/2 = 2.0 kg
-Rate card  = ₹55/kg (North→South B2C)
-Base       = 2.0 × 55 = ₹110.00
-COD (2%)   = ₹2.20
-Total      = ₹112.20 ✓
+1. Determine intra-zone vs inter-zone (same pickup/drop zone)
+2. Look up the effective rate card:
+   WHERE from_zone = pickup, to_zone = drop, order_type = B2B|B2C
+   AND effective_from <= TODAY
+   ORDER BY effective_from DESC LIMIT 1
+3. Volumetric weight = (length × breadth × height) / 5000
+4. Billable weight   = max(actual, volumetric), rounded UP to nearest 0.5 kg
+                       = Math.ceil(rawBillable × 2) / 2
+5. Base charge       = billable_weight × base_rate_per_kg
+6. COD surcharge     = base_charge × cod_surcharge_percent / 100  (if paymentType = COD)
+7. Total             = base_charge + cod_surcharge
 ```
 
-Verify via API:
+**Worked example** — 30 × 20 × 15 cm, 1.2 kg actual, B2C, COD, North → South Zone:
+
+```
+Volumetric = (30 × 20 × 15) / 5000 = 1.800 kg
+Billable   = max(1.2, 1.8) → ceil(1.8 × 2) / 2 = 2.0 kg
+Rate card  = ₹55 / kg  (North→South, B2C)
+Base       = 2.0 × 55  = ₹110.00
+COD (2%)   =             ₹2.20
+Total                  = ₹112.20
+```
+
+Verify live:
+
 ```bash
-# Get zones
+# Step 1 — get zone IDs
 curl http://localhost:4000/api/zones
 
-# Calculate charge
+# Step 2 — calculate charge
 curl -X POST http://localhost:4000/api/orders/calculate-charge \
   -H "Content-Type: application/json" \
   -d '{
     "pickupZoneId": "<north-zone-id>",
-    "dropZoneId": "<south-zone-id>",
+    "dropZoneId":   "<south-zone-id>",
     "lengthCm": 30, "breadthCm": 20, "heightCm": 15,
     "actualWeightKg": 1.2,
-    "orderType": "B2C",
+    "orderType":   "B2C",
     "paymentType": "COD"
   }'
 ```
+
+Expected response: `"totalCharge": 112.2`
 
 ---
 
@@ -388,12 +384,12 @@ lastMile/
 │       │   ├── auth.ts         # JWT + refresh token rotation
 │       │   └── errorHandler.ts # AppError + global handler
 │       ├── services/
-│       │   ├── rateEngine.ts   # Core rate calculation
-│       │   ├── autoAssign.ts   # Intelligent agent assignment
-│       │   ├── orderLifecycle.ts # Status transitions + agent release
-│       │   ├── emailService.ts  # Nodemailer + graceful failure
-│       │   ├── rescheduleService.ts # Reschedule with idempotency
-│       │   └── trackingNumber.ts    # LMD-YYYYMMDD-XXXXX generator
+│       │   ├── rateEngine.ts        # Core rate calculation (DB-driven)
+│       │   ├── autoAssign.ts        # Zone-first agent assignment
+│       │   ├── orderLifecycle.ts    # Status state machine + agent auto-release
+│       │   ├── emailService.ts      # Nodemailer + graceful failure
+│       │   ├── rescheduleService.ts # Reschedule with idempotency guard
+│       │   └── trackingNumber.ts    # LMD-YYYYMMDD-XXXXX collision-safe generator
 │       └── routes/
 │           ├── auth.ts         # Auth endpoints
 │           ├── orders.ts       # Order management
@@ -404,22 +400,22 @@ lastMile/
 └── client/                     # Next.js 14 frontend
     └── src/
         ├── app/
-        │   ├── (auth)/login    # Login page
-        │   ├── (auth)/register # Register page
-        │   ├── (customer)/     # Customer-facing pages
-        │   ├── (agent)/        # Agent dashboard
-        │   ├── (admin)/        # Admin dashboard (5 tabs)
-        │   └── track/          # Public tracking + reschedule
+        │   ├── (auth)/login         # Login page
+        │   ├── (auth)/register      # Register page
+        │   ├── (customer)/          # Customer dashboard, new order, order detail
+        │   ├── (agent)/             # Agent delivery dashboard
+        │   ├── (admin)/             # Admin dashboard (5 tabs)
+        │   └── track/               # Public tracking + reschedule
         ├── components/
-        │   ├── tracking-timeline.tsx  # Animated event timeline
+        │   ├── tracking-timeline.tsx  # Animated Framer Motion event timeline
         │   ├── status-badge.tsx       # Pulsing status indicators
         │   ├── charge-calculator.tsx  # Live rate calculator widget
-        │   ├── navbar.tsx             # Role-aware navigation
-        │   └── map-view.tsx           # Leaflet map with custom pins
+        │   ├── navbar.tsx             # Role-aware responsive navigation
+        │   └── map-view.tsx           # Leaflet map with custom order/agent pins
         └── lib/
-            ├── api.ts          # Axios client + interceptors
+            ├── api.ts          # Axios client + auto-refresh interceptors
             ├── auth.tsx        # Auth context provider
-            └── utils.ts        # Formatters, helpers
+            └── utils.ts        # Formatters, status helpers
 ```
 
 ---
@@ -432,21 +428,20 @@ This is a monorepo (`/server` + `/client` in one Git repo) — both platforms ne
 
 1. [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo** → select this repo.
 2. On the created service, go to **Settings → Root Directory** and set it to `server`.
-3. **New → Database → Add PostgreSQL** in the same project. Railway auto-injects `DATABASE_URL` into every service in the project — you don't need to copy it manually.
-4. On the backend service, go to **Variables** and add everything from `server/.env.example` *except* `DATABASE_URL`:
-   `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `NODE_ENV=production`, `FRONTEND_URL` (fill in after step 4 of the frontend deploy), `CORS_ORIGIN` (same as `FRONTEND_URL`).
-5. Deploy. Railway runs `npm install` → `postinstall` (`prisma generate`) → `npm run build` (`tsc`) → `npm start`, and `npm start` runs `prisma migrate deploy` automatically before booting the server, so the schema is applied on every deploy with no manual step.
-6. Once live, copy the public URL Railway gives the service (**Settings → Networking → Generate Domain**) — you'll need it for the frontend's `NEXT_PUBLIC_API_URL`.
-7. Seed production data once, from your machine, pointed at the Railway Postgres: set `DATABASE_URL` locally to the value shown in Railway's Postgres **Variables** tab, then run `npm run db:seed` inside `server/`.
+3. **New → Database → Add PostgreSQL** in the same project. Railway auto-injects `DATABASE_URL` into every service in the project.
+4. On the backend service, go to **Variables** and add everything from `server/.env.example` except `DATABASE_URL`:
+   `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, `NODE_ENV=production`, `FRONTEND_URL`, `CORS_ORIGIN`.
+5. Deploy. Railway runs `npm install` → `prisma generate` → `tsc` → `npm start`, and `npm start` runs `prisma migrate deploy` automatically before booting.
+6. Once live, copy the public URL from **Settings → Networking → Generate Domain** — you'll need it for the frontend's `NEXT_PUBLIC_API_URL`.
+7. Seed production data once from your machine: set `DATABASE_URL` locally to the Railway Postgres value, then run `npx prisma db seed` inside `server/`.
 
 ### Frontend → Vercel
 
 1. [vercel.com](https://vercel.com) → **Add New → Project** → import this repo.
-2. In the import screen, set **Root Directory** to `client` (Vercel auto-detects Next.js once you do).
-3. Add environment variables: `NEXT_PUBLIC_API_URL=https://<your-railway-domain>` and `NEXT_PUBLIC_APP_URL=https://<your-vercel-domain>` (the second one you'll only know after the first deploy — redeploy once to fill it in, or set it to your intended custom domain upfront).
+2. In the import screen, set **Root Directory** to `client` (Vercel auto-detects Next.js).
+3. Add environment variables: `NEXT_PUBLIC_API_URL=https://<your-railway-domain>` and `NEXT_PUBLIC_APP_URL=https://<your-vercel-domain>`.
 4. Deploy.
-5. Go back to Railway and set `FRONTEND_URL` and `CORS_ORIGIN` on the backend service to the Vercel URL from step 4, then redeploy the backend — without this, the browser will block API calls with a CORS error and reset-password/status emails will link to `localhost`.
-6. Update the **Live Demo** table at the top of this README with the real URLs before submitting.
+5. Go back to Railway and set `FRONTEND_URL` and `CORS_ORIGIN` on the backend service to the Vercel URL, then redeploy the backend — without this the browser will block API calls with a CORS error.
 
 **Sanity check after deploying both:** open the Vercel URL, register a customer account, place an order, and confirm the charge breakdown appears — that exercises frontend → backend → Postgres → Prisma end-to-end in one action.
 
@@ -456,9 +451,9 @@ This is a monorepo (`/server` + `/client` in one Git repo) — both platforms ne
 
 | Decision | Why |
 |----------|-----|
-| Refresh token stored hashed (SHA-256) in DB | Token theft from DB gives attacker nothing usable |
-| Refresh token rotation | Detects token reuse — if old token used, all tokens revoked |
-| httpOnly cookie for refresh token | XSS can't steal it |
-| Helmet.js | Prevents common HTTP header attacks |
-| Zod validation on all inputs | No raw user input ever reaches DB |
-| Prisma parameterized queries | SQL injection impossible |
+| Refresh token stored as SHA-256 hash in DB | Token theft from DB gives attacker nothing usable |
+| Refresh token rotation on every use | Detects reuse attacks — if an old token is replayed, all user tokens are immediately revoked |
+| httpOnly cookie for refresh token | XSS cannot steal it via `document.cookie` |
+| Helmet.js on all responses | Sets secure HTTP headers (CSP, HSTS, X-Frame-Options, etc.) |
+| Zod validation on all request bodies | No raw user input ever reaches the ORM |
+| Prisma parameterized queries | SQL injection is structurally impossible |

@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { OrderType } from '@prisma/client';
+import { OrderType, Role } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { successResponse } from '../utils/response';
-import { Role } from '@prisma/client';
+import { cacheDelete, cacheGet, cacheSet, CacheKeys, getCacheStats } from '../lib/redis';
 
 const router = Router();
 
@@ -27,6 +27,14 @@ const rateCardSchema = z.object({
 router.get('/', requireAuth, requireRole(Role.ADMIN), async (req, res, next) => {
   try {
     const { orderType } = req.query;
+
+    // Cache the full list (invalidated on any write)
+    const cacheKey = CacheKeys.allRateCards();
+    const cached = await cacheGet<any[]>(cacheKey);
+    if (cached && !orderType) {
+      return successResponse(res, { rateCards: cached, _cached: true });
+    }
+
     const where: any = {};
     if (orderType) where.orderType = orderType;
 
@@ -39,21 +47,23 @@ router.get('/', requireAuth, requireRole(Role.ADMIN), async (req, res, next) => 
       orderBy: [{ orderType: 'asc' }, { fromZone: { name: 'asc' } }, { toZone: { name: 'asc' } }, { effectiveFrom: 'desc' }],
     });
 
-    return successResponse(res, { rateCards });
+    // Cache the list (only when not filtered)
+    if (!orderType) await cacheSet(cacheKey, rateCards, 3600);
+
+    return successResponse(res, { rateCards, _cached: false });
   } catch (err) {
     next(err);
   }
 });
 
 // ─────────────────────────────────────────────────────────────
-// POST /api/rate-cards — Create (with duplicate validation)
+// POST /api/rate-cards — Create
 // ─────────────────────────────────────────────────────────────
 
 router.post('/', requireAuth, requireRole(Role.ADMIN), async (req, res, next) => {
   try {
     const data = rateCardSchema.parse(req.body);
 
-    // Validate no duplicate (zone pair + type + intra + effectiveFrom)
     const existing = await prisma.rateCard.findFirst({
       where: {
         fromZoneId: data.fromZoneId,
@@ -89,6 +99,10 @@ router.post('/', requireAuth, requireRole(Role.ADMIN), async (req, res, next) =>
       },
     });
 
+    // Invalidate all rate card cache entries
+    await cacheDelete(CacheKeys.rateCardPattern());
+    console.log('[REDIS] Rate card cache invalidated after CREATE');
+
     return successResponse(res, { rateCard }, 201);
   } catch (err) {
     next(err);
@@ -96,7 +110,7 @@ router.post('/', requireAuth, requireRole(Role.ADMIN), async (req, res, next) =>
 });
 
 // ─────────────────────────────────────────────────────────────
-// PUT /api/rate-cards/:id — Update (with duplicate validation)
+// PUT /api/rate-cards/:id — Update
 // ─────────────────────────────────────────────────────────────
 
 router.put('/:id', requireAuth, requireRole(Role.ADMIN), async (req, res, next) => {
@@ -106,7 +120,6 @@ router.put('/:id', requireAuth, requireRole(Role.ADMIN), async (req, res, next) 
     const existing = await prisma.rateCard.findUnique({ where: { id: req.params.id } });
     if (!existing) throw new AppError('Rate card not found', 'NOT_FOUND', 404);
 
-    // If zone pair, type, or date changed, check for duplicates
     const newFromZoneId = data.fromZoneId || existing.fromZoneId;
     const newToZoneId = data.toZoneId || existing.toZoneId;
     const newOrderType = (data.orderType || existing.orderType) as OrderType;
@@ -146,6 +159,10 @@ router.put('/:id', requireAuth, requireRole(Role.ADMIN), async (req, res, next) 
       },
     });
 
+    // Invalidate all rate card cache entries
+    await cacheDelete(CacheKeys.rateCardPattern());
+    console.log('[REDIS] Rate card cache invalidated after UPDATE');
+
     return successResponse(res, { rateCard });
   } catch (err) {
     next(err);
@@ -153,16 +170,33 @@ router.put('/:id', requireAuth, requireRole(Role.ADMIN), async (req, res, next) 
 });
 
 // ─────────────────────────────────────────────────────────────
-// DELETE /api/rate-cards/:id — ADMIN only
+// DELETE /api/rate-cards/:id
 // ─────────────────────────────────────────────────────────────
 
 router.delete('/:id', requireAuth, requireRole(Role.ADMIN), async (req, res, next) => {
   try {
     await prisma.rateCard.delete({ where: { id: req.params.id } });
+
+    // Invalidate all rate card cache entries
+    await cacheDelete(CacheKeys.rateCardPattern());
+    console.log('[REDIS] Rate card cache invalidated after DELETE');
+
     return successResponse(res, { message: 'Rate card deleted' });
   } catch (err) {
     next(err);
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/rate-cards/cache-stats — Cache metrics
+// ─────────────────────────────────────────────────────────────
+
+router.get('/cache-stats', requireAuth, requireRole(Role.ADMIN), async (_req, res) => {
+  const stats = getCacheStats();
+  return successResponse(res, {
+    cache: stats,
+    summary: `Redis cache hit rate: ${stats.hitRatePercent}% (${stats.hits} hits, ${stats.misses} misses out of ${stats.total} lookups)`,
+  });
 });
 
 export default router;

@@ -9,7 +9,7 @@ const nextConfig = {
   images: {
     domains: ['tile.openstreetmap.org', 'cdnjs.cloudflare.com'],
   },
-  // Don't fail build on lint warnings (hackathon build speed)
+  // Skip lint/type errors during production build
   eslint: {
     ignoreDuringBuilds: true,
   },

@@ -208,7 +208,7 @@ export default function LandingPage() {
 
       {/* ── FOOTER ──────────────────────────────────────────── */}
       <footer className="border-t border-white/10 py-8 px-4 text-center text-white/30 text-sm">
-        <p>© {new Date().getFullYear()} LastMile Delivery Tracker · Built for the hackathon challenge</p>
+        <p>© {new Date().getFullYear()} LastMile Delivery Tracker · Open-source logistics platform</p>
       </footer>
     </div>
   );

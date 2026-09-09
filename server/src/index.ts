@@ -11,6 +11,10 @@ import zoneRoutes from './routes/zones';
 import rateCardRoutes from './routes/rateCards';
 import agentRoutes from './routes/agents';
 import adminRoutes from './routes/admin';
+import { getRedisClient } from './lib/redis';
+
+// Eagerly connect to Redis on startup (graceful if unavailable)
+getRedisClient();
 
 const app = express();
 
@@ -43,7 +47,34 @@ app.use(express.urlencoded({ extended: true }));
 // ROUTES
 // ─────────────────────────────────────────────────────────────
 
-app.get('/health', (req, res) => {
+// Root — API info (shown when visiting the backend URL directly)
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'LastMile Delivery Tracker API',
+    version: '1.0.0',
+    status: 'running',
+    description: 'Production-grade last-mile delivery tracking REST API with rate engine, auto-assignment, and real-time order lifecycle management.',
+    stack: ['Node.js 20', 'Express 4', 'TypeScript', 'PostgreSQL 15 + Prisma', 'Redis 7'],
+    docs: {
+      health:    '/health',
+      auth:      '/api/auth/login  [POST]',
+      orders:    '/api/orders      [GET, POST]',
+      rateCalc:  '/api/orders/calculate-charge  [POST — public]',
+      tracking:  '/api/orders/track/:trackingNumber  [GET — public]',
+      zones:     '/api/zones       [GET]',
+      rateCards: '/api/rate-cards  [GET]',
+      cacheStats:'/api/rate-cards/cache-stats  [GET — admin]',
+    },
+    demoCredentials: {
+      admin:    'admin@lastmile.com    / Test@1234',
+      agent:    'agent1@lastmile.com   / Test@1234',
+      customer: 'customer1@lastmile.com / Test@1234',
+    },
+    github: 'https://github.com/anshumanvatsa/Last-Mile-Delivery-Tracker',
+  });
+});
+
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' });
 });
 
